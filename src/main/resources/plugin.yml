@@ -1,16 +1,22 @@
-name: BonemealRadius:
-main: io.github.toomanybugs1.BonemealRadius.BonemealRadius
+api-version: 1.19
+name: BonemealRadius
+main: io.github.toomanybugs1.bonemealradius.BonemealRadius
 version: 0.1
-
+commands:
+    bm:
+        description: Allows the user to set the parameters for their bonemeal.
+        usage: /bm <radius/flower/hit> <range/percentage>
+        permission: bonemealradius.commands
+        permission-message: You don't have permission to set these parameters.
 permissions:
-	bonemealradius.*:
-		description: Gives access to all permissions
-		children:
-			bonemealradius.use: true
-			bonemealradius.commands: true
-	bonemealradius.use:
-		description: Allows usage of the modified bonemeal radius
-		default: op
-	bonemealradius.commands:
-		description: Gives access to all commands
-		default: op
+    bonemealradius.*:
+        description: Gives access to all permissions
+        children:
+            bonemealradius.use: true
+            bonemealradius.commands: true
+    bonemealradius.use:
+        description: Allows usage of the modified bonemeal radius
+        default: op
+    bonemealradius.commands:
+        description: Gives access to all commands
+        default: op

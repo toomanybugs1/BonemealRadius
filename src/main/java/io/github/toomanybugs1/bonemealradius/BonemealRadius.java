@@ -1,9 +1,11 @@
 package io.github.toomanybugs1.bonemealradius;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Random;
 
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
+import org.bukkit.*;
 import org.bukkit.block.Biome;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -12,14 +14,16 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class BonemealRadius extends JavaPlugin implements Listener {
 	
-	int bonemealRadius;
-	int hitRatio;
-	int flowerRatio;
+	HashMap<String, List<Integer>> playerSettings;
+	int defaultRadius = 0;
+	int defaultFlowerRatio = 30;
+	int defaultHitRatio = 66;
 	
 	@Override
     public void onEnable() {
@@ -27,9 +31,11 @@ public class BonemealRadius extends JavaPlugin implements Listener {
 		
 		this.saveDefaultConfig();
 		
-		this.bonemealRadius = this.getConfig().getInt("bonemeal-radius");
-		this.hitRatio = this.getConfig().getInt("hit-ratio");
-		this.flowerRatio = this.getConfig().getInt("flower-ratio");
+		this.playerSettings = loadSettings();
+		
+		if (this.playerSettings == null || !(this.playerSettings instanceof HashMap)) {
+			this.playerSettings = new HashMap<String, List<Integer>>();
+		}
     }
     
     @Override
@@ -40,107 +46,134 @@ public class BonemealRadius extends JavaPlugin implements Listener {
 
         if (sender instanceof Player && sender.hasPermission("bonemealradius.commands")) {
         	int newNumber;
+        	List<Integer> playerValues = this.playerSettings.get(sender.getName());
         	
         	try {
         		newNumber = Integer.parseInt(args[1]);
         	}
         	catch (Exception e) {
-        		sender.sendMessage("Radius or ratio must be a number.");
+        		sender.sendMessage(ChatColor.GOLD + "[BonemealRadius] " + ChatColor.RED + "Radius or ratio must be a number.");
         		return false;
         	}
         	
-        	if (args[0] == "hit") {
+        	if (playerValues == null || playerValues.size() != 3) 
+        		playerValues = Arrays.asList(new Integer[] {this.defaultRadius, this.defaultFlowerRatio, this.defaultHitRatio});
+        	
+        	if (args[0].equalsIgnoreCase("hit")) {
         		
         		if (newNumber > 100 || newNumber < 0) {
-        			sender.sendMessage("Hit ratio must be a percentage between 0 and 100 ");
+        			sender.sendMessage(ChatColor.GOLD + "[BonemealRadius] " + ChatColor.RED + "Hit ratio must be a percentage between 0 and 100 ");
         			return false;
         		}
         			
-        		this.hitRatio = newNumber;
-        		this.getConfig().set("hit-ratio", this.hitRatio);
+        		playerValues.set(2, newNumber);
+        		this.playerSettings.put(sender.getName(), playerValues);
+        		this.saveSettings();
         		
-        		sender.sendMessage("Set hit ratio to " + this.hitRatio);
+        		sender.sendMessage(ChatColor.GOLD + "[BonemealRadius] " + ChatColor.WHITE + "Set hit ratio to " + playerValues.get(2));
         		
         		return true;
         	}
         	
-        	if (args[0] == "flower") {
+        	if (args[0].equalsIgnoreCase("flower")) {
         		
         		if (newNumber > 100 || newNumber < 0) {
-        			sender.sendMessage("Flower ratio must be a percentage between 0 and 100 ");
+        			sender.sendMessage(ChatColor.GOLD + "[BonemealRadius] " + ChatColor.RED + "Flower ratio must be a percentage between 0 and 100 ");
         			return false;
         		}
         			
-        		this.flowerRatio = newNumber;
-        		this.getConfig().set("flower-ratio", this.flowerRatio);
+        		playerValues.set(1, newNumber);
+        		this.playerSettings.put(sender.getName(), playerValues);
+        		this.saveSettings();
         		
-        		sender.sendMessage("Set flower ratio to " + this.flowerRatio);
+        		sender.sendMessage(ChatColor.GOLD + "[BonemealRadius] " + ChatColor.WHITE + "Set flower ratio to " + playerValues.get(1));
         		
         		return true;
         	}
         	
-        	if (args[0] == "radius") {
+        	if (args[0].equalsIgnoreCase("radius")) {
         		if (newNumber < 0) {
-        			sender.sendMessage("Radius must be a positive integer");
+        			sender.sendMessage(ChatColor.GOLD + "[BonemealRadius] " + ChatColor.RED + "Radius must be a positive integer");
         			return false;
         		}
+
+				if (newNumber > 20)
+					sender.sendMessage(ChatColor.GOLD + "[BonemealRadius] " + ChatColor.RED + "Warning: A large radius can cause server lag. Proceed with caution.");
+
+				playerValues.set(0, newNumber);
+        		this.playerSettings.put(sender.getName(), playerValues);
+        		this.saveSettings();
         		
-        		this.bonemealRadius = newNumber;
-        		this.getConfig().set("bonemeal-radius", this.bonemealRadius);
-        		
-        		sender.sendMessage("Set bonemeal radius to " + this.bonemealRadius);
+        		sender.sendMessage(ChatColor.GOLD + "[BonemealRadius] " + ChatColor.WHITE + "Set bonemeal radius to " + playerValues.get(0));
         		return true;
         	}
 
         	return false;
         }
         else {
-            sender.sendMessage("Only players with permissions can use this command.");
+            sender.sendMessage(ChatColor.GOLD + "[BonemealRadius] " + ChatColor.RED + "Only players with permissions can use this command.");
             return false;
         }
     }
     
     @EventHandler
     public void onPlayerUse(PlayerInteractEvent event) {
-    	if (event == null) {
+    	if (event == null)
     		return;
-    	}
+
+		if (event.getAction() != Action.RIGHT_CLICK_BLOCK)
+			return;
     	
     	Player player = event.getPlayer();
     	
     	if (player.getInventory().getItemInMainHand().getType() != Material.BONE_MEAL)
     		return;
     	
-    	if (player.hasPermission("bonemealradius.use") ) {
-    		applyBonemeal(event.getClickedBlock());
+    	if (player.hasPermission("bonemealradius.use") && event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.GRASS_BLOCK) {
+			List<Integer> playerValues = this.playerSettings.get(player.getName());
+			if (playerValues == null)
+				playerValues = Arrays.asList(new Integer[] {this.defaultRadius, this.defaultFlowerRatio, this.defaultHitRatio});
+
+			// if radius is set to 0, apply bonemeal as normal
+			if (playerValues.get(0) == 0)
+				return;
+
+			event.setCancelled(true);
+    		applyBonemeal(event.getClickedBlock(), player, playerValues);
     		player.getInventory().getItemInMainHand().setAmount(player.getInventory().getItemInMainHand().getAmount() - 1);
     	}
     }
     
-    private void applyBonemeal(Block center) {
+    private void applyBonemeal(Block center, Player player, List<Integer> playerValues) {
+
+    	int bonemealRadius = playerValues.get(0);
+    	int flowerRatio = playerValues.get(1);
+    	int hitRatio = playerValues.get(2);
+    	
     	Random rnd = new Random();
-        int radius_squared = this.bonemealRadius * this.bonemealRadius;
+        int radius_squared = bonemealRadius * bonemealRadius;
         Block toHandle;
         
-        for (int x = -this.bonemealRadius; x <= this.bonemealRadius; x++) {
-            for (int z = -this.bonemealRadius; z <= this.bonemealRadius; z++) {
-                toHandle =  center.getWorld().getHighestBlockAt(center.getX() + x, center.getZ() + z);
-                
-                if (toHandle.getRelative(BlockFace.DOWN).getType() == Material.GRASS) { // Block beneath is grass
+        for (int x = -bonemealRadius; x <= bonemealRadius; x++) {
+            for (int z = -bonemealRadius; z <= bonemealRadius; z++) {
+                toHandle =  getRelativeHighest(center.getX() + x, center.getY(), center.getZ() + z, center.getWorld());
+                if (toHandle.getRelative(BlockFace.DOWN).getType() == Material.GRASS_BLOCK) { // Block beneath is grass
                     if (center.getLocation().distanceSquared(toHandle.getLocation()) <= radius_squared) { // Block is in radius
-                        if (rnd.nextInt(100) < this.hitRatio) { 
-                        	if (rnd.nextInt(100) < this.flowerRatio) {
+                    	if (rnd.nextInt(100) <= hitRatio) {
+                        	if (rnd.nextInt(100) <= flowerRatio) {
                         		Material newFlower = applyFlower(toHandle.getBiome());
                         		if (newFlower != null) {
                         			toHandle.setType(newFlower);
-                                    toHandle.setBlockData(null);
+                                    toHandle.setBlockData(newFlower.createBlockData());
                         		}
                         		else {
                         			toHandle.setType(Material.GRASS);
+                                    toHandle.setBlockData(Material.GRASS.createBlockData());
                         		}
                         	}
                         	else {
                         		toHandle.setType(Material.GRASS);
+                        		toHandle.setBlockData(Material.GRASS.createBlockData());
                         	}
                         }
                     }
@@ -184,7 +217,7 @@ public class BonemealRadius extends JavaPlugin implements Listener {
     		case END_MIDLANDS:
     		case END_BARRENS:
     		case SMALL_END_ISLANDS:
-    			return getFlower(null);
+    			return null;
     		default:
     			return getFlower(new Material[] {Material.DANDELION, Material.POPPY});
     			
@@ -198,4 +231,38 @@ public class BonemealRadius extends JavaPlugin implements Listener {
     	
     	return possibleFlowers[randomInt];
     }
+    
+    private HashMap<String, List<Integer>> loadSettings() {
+    	HashMap<String, List<Integer>> settings = new HashMap<String, List<Integer>>();
+    	
+    	if (this.getConfig().getConfigurationSection("HashMap") != null) {
+	    	for (String key : this.getConfig().getConfigurationSection("HashMap").getKeys(false)) {
+	    		settings.put(key, this.getConfig().getIntegerList("HashMap."+key));
+			}
+    	}
+
+		return settings;
+    }
+    
+    private void saveSettings() {
+    	for (String key : this.playerSettings.keySet()) {
+			if (this.getConfig().getConfigurationSection("HashMap") == null)
+				this.getConfig().createSection("HashMap");
+
+    		this.getConfig().getConfigurationSection("HashMap").set(key, this.playerSettings.get(key));
+    	}
+    	
+    	this.saveConfig();
+    }
+
+	// get the nearest air block ABOVE a certain coordinate
+	private Block getRelativeHighest(int relX, int relY, int relZ, World world) {
+		Block curBlock = world.getBlockAt(relX, relY, relZ);
+
+		while(curBlock.getType() != Material.AIR) {
+			curBlock = world.getBlockAt(curBlock.getRelative(BlockFace.UP).getLocation());
+		}
+
+		return curBlock;
+	}
 }
