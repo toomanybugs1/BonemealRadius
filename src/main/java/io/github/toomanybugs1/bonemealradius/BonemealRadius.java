@@ -9,6 +9,7 @@ import org.bukkit.*;
 import org.bukkit.block.Biome;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.Bisected;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -24,6 +25,8 @@ public class BonemealRadius extends JavaPlugin implements Listener {
 	int defaultRadius = 0;
 	int defaultFlowerRatio = 30;
 	int defaultHitRatio = 66;
+
+	int doubleGrassRatio = 15;
 	
 	@Override
     public void onEnable() {
@@ -167,13 +170,23 @@ public class BonemealRadius extends JavaPlugin implements Listener {
                                     toHandle.setBlockData(newFlower.createBlockData());
                         		}
                         		else {
-                        			toHandle.setType(Material.GRASS);
-                                    toHandle.setBlockData(Material.GRASS.createBlockData());
+									if (rnd.nextInt(100) <= doubleGrassRatio && toHandle.getRelative(BlockFace.UP).getType() == Material.AIR) {
+										placeDoubleGrass(toHandle);
+									}
+									else {
+										toHandle.setType(Material.GRASS);
+										toHandle.setBlockData(Material.GRASS.createBlockData());
+									}
                         		}
                         	}
                         	else {
-                        		toHandle.setType(Material.GRASS);
-                        		toHandle.setBlockData(Material.GRASS.createBlockData());
+								if (rnd.nextInt(100) <= doubleGrassRatio && toHandle.getRelative(BlockFace.UP).getType() == Material.AIR) {
+									placeDoubleGrass(toHandle);
+								}
+								else {
+									toHandle.setType(Material.GRASS);
+									toHandle.setBlockData(Material.GRASS.createBlockData());
+								}
                         	}
                         }
                     }
@@ -259,10 +272,33 @@ public class BonemealRadius extends JavaPlugin implements Listener {
 	private Block getRelativeHighest(int relX, int relY, int relZ, World world) {
 		Block curBlock = world.getBlockAt(relX, relY, relZ);
 
-		while(curBlock.getType() != Material.AIR) {
-			curBlock = world.getBlockAt(curBlock.getRelative(BlockFace.UP).getLocation());
-		}
+		// block is not air, so we must move up
+		if (curBlock.getType() != Material.AIR) {
+			while (curBlock.getType() != Material.AIR) {
+				curBlock = world.getBlockAt(curBlock.getRelative(BlockFace.UP).getLocation());
+			}
 
+		}
+		// block is air, so we must move down until the block below isn't air
+		else {
+			while (curBlock.getRelative(BlockFace.DOWN).getType() == Material.AIR) {
+				curBlock = world.getBlockAt(curBlock.getRelative(BlockFace.DOWN).getLocation());
+			}
+		}
 		return curBlock;
+	}
+
+	private void placeDoubleGrass(Block b) {
+		b.getRelative(BlockFace.UP).setType(Material.TALL_GRASS, false);
+		b.setType(Material.TALL_GRASS, false);
+
+		Bisected dataUpper = (Bisected) b.getRelative(BlockFace.UP).getBlockData();
+		dataUpper.setHalf(Bisected.Half.TOP);
+
+		Bisected dataLower = (Bisected) b.getBlockData();
+		dataLower.setHalf(Bisected.Half.BOTTOM);
+
+		b.getRelative(BlockFace.UP).setBlockData(dataUpper);
+		b.setBlockData(dataLower);
 	}
 }
