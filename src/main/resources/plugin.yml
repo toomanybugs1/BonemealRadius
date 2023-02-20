@@ -1,7 +1,7 @@
 api-version: 1.19
 name: BonemealRadius
 main: io.github.toomanybugs1.bonemealradius.BonemealRadius
-version: 0.1
+version: 0.5
 commands:
     bm:
         description: Allows the user to set the parameters for their bonemeal.

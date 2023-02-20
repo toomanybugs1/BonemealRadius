@@ -131,8 +131,27 @@ public class BonemealRadius extends JavaPlugin implements Listener {
     	
     	if (player.getInventory().getItemInMainHand().getType() != Material.BONE_MEAL)
     		return;
-    	
-    	if (player.hasPermission("bonemealradius.use") && event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.GRASS_BLOCK) {
+
+		Block clickedBlock = event.getClickedBlock();
+		Material clickedMat = null;
+
+		if (clickedBlock != null)
+			clickedMat = clickedBlock.getType();
+
+		// check for permissions and allowed materials
+    	if (player.hasPermission("bonemealradius.use") && clickedBlock != null &&
+				(clickedMat == Material.GRASS_BLOCK ||
+				clickedMat == Material.DIRT ||
+				clickedMat == Material.COARSE_DIRT ||
+				clickedMat == Material.SAND ||
+				clickedMat == Material.RED_SAND ||
+				clickedMat == Material.GRAVEL ||
+				clickedMat == Material.CLAY)) {
+
+			// only grass block is allowed if we're not underwater
+			if (clickedMat != Material.GRASS_BLOCK && clickedBlock.getRelative(BlockFace.UP).getType() != Material.WATER)
+				return;
+
 			List<Integer> playerValues = this.playerSettings.get(player.getName());
 			if (playerValues == null)
 				playerValues = Arrays.asList(new Integer[] {this.defaultRadius, this.defaultFlowerRatio, this.defaultHitRatio});
@@ -142,8 +161,11 @@ public class BonemealRadius extends JavaPlugin implements Listener {
 				return;
 
 			event.setCancelled(true);
-    		applyBonemeal(event.getClickedBlock(), player, playerValues);
-    		player.getInventory().getItemInMainHand().setAmount(player.getInventory().getItemInMainHand().getAmount() - 1);
+    		applyBonemeal(clickedBlock, player, playerValues);
+
+			// reduce the bonemeal count by 1 if they're NOT in create mode
+			if (player.getGameMode() != GameMode.CREATIVE)
+    			player.getInventory().getItemInMainHand().setAmount(player.getInventory().getItemInMainHand().getAmount() - 1);
     	}
     }
     
@@ -160,37 +182,58 @@ public class BonemealRadius extends JavaPlugin implements Listener {
         for (int x = -bonemealRadius; x <= bonemealRadius; x++) {
             for (int z = -bonemealRadius; z <= bonemealRadius; z++) {
                 toHandle =  getRelativeHighest(center.getX() + x, center.getY(), center.getZ() + z, center.getWorld());
-                if (toHandle.getRelative(BlockFace.DOWN).getType() == Material.GRASS_BLOCK) { // Block beneath is grass
-                    if (center.getLocation().distanceSquared(toHandle.getLocation()) <= radius_squared) { // Block is in radius
-                    	if (rnd.nextInt(100) <= hitRatio) {
-                        	if (rnd.nextInt(100) <= flowerRatio) {
-                        		Material newFlower = applyFlower(toHandle.getBiome());
-                        		if (newFlower != null) {
-                        			toHandle.setType(newFlower);
-                                    toHandle.setBlockData(newFlower.createBlockData());
-                        		}
-                        		else {
+				Material matBelow = toHandle.getRelative(BlockFace.DOWN).getType();
+
+				// Not in water
+				if (toHandle.getType() != Material.WATER) {
+					if (matBelow == Material.GRASS_BLOCK) { // Block beneath is grass
+						if (center.getLocation().distanceSquared(toHandle.getLocation()) <= radius_squared) { // Block is in radius
+							if (rnd.nextInt(100) <= hitRatio) {
+								if (rnd.nextInt(100) <= flowerRatio) {
+									Material newFlower = applyFlower(toHandle.getBiome());
+									if (newFlower != null) {
+										toHandle.setType(newFlower);
+										toHandle.setBlockData(newFlower.createBlockData());
+									} else {
+										if (rnd.nextInt(100) <= doubleGrassRatio && toHandle.getRelative(BlockFace.UP).getType() == Material.AIR) {
+											placeDoubleGrass(toHandle);
+										} else {
+											toHandle.setType(Material.GRASS);
+											toHandle.setBlockData(Material.GRASS.createBlockData());
+										}
+									}
+								} else {
 									if (rnd.nextInt(100) <= doubleGrassRatio && toHandle.getRelative(BlockFace.UP).getType() == Material.AIR) {
 										placeDoubleGrass(toHandle);
-									}
-									else {
+									} else {
 										toHandle.setType(Material.GRASS);
 										toHandle.setBlockData(Material.GRASS.createBlockData());
 									}
-                        		}
-                        	}
-                        	else {
-								if (rnd.nextInt(100) <= doubleGrassRatio && toHandle.getRelative(BlockFace.UP).getType() == Material.AIR) {
-									placeDoubleGrass(toHandle);
 								}
-								else {
-									toHandle.setType(Material.GRASS);
-									toHandle.setBlockData(Material.GRASS.createBlockData());
+							}
+						}
+					}
+				}
+				else if (toHandle.getType() == Material.WATER) {
+					if (matBelow == Material.GRASS_BLOCK ||
+							matBelow == Material.DIRT ||
+							matBelow == Material.COARSE_DIRT ||
+							matBelow == Material.SAND ||
+							matBelow == Material.RED_SAND ||
+							matBelow == Material.GRAVEL ||
+							matBelow == Material.CLAY) {
+						if (rnd.nextInt(100) <= hitRatio) {
+							if (center.getLocation().distanceSquared(toHandle.getLocation()) <= radius_squared) {
+								if (rnd.nextInt(100) <= doubleGrassRatio && toHandle.getRelative(BlockFace.UP).getType() == Material.WATER) {
+									placeDoubleSeaGrass(toHandle);
+								} else {
+									toHandle.setType(Material.SEAGRASS);
+									toHandle.setBlockData(Material.SEAGRASS.createBlockData());
 								}
-                        	}
-                        }
-                    }
-                }
+							}
+						}
+					}
+				}
             }
         }
     }
@@ -272,16 +315,16 @@ public class BonemealRadius extends JavaPlugin implements Listener {
 	private Block getRelativeHighest(int relX, int relY, int relZ, World world) {
 		Block curBlock = world.getBlockAt(relX, relY, relZ);
 
-		// block is not air, so we must move up
-		if (curBlock.getType() != Material.AIR) {
-			while (curBlock.getType() != Material.AIR) {
+		// block is not air or water, so we must move up
+		if (curBlock.getType() != Material.AIR && curBlock.getType() != Material.WATER) {
+			while (curBlock.getType() != Material.AIR && curBlock.getType() != Material.WATER) {
 				curBlock = world.getBlockAt(curBlock.getRelative(BlockFace.UP).getLocation());
 			}
 
 		}
 		// block is air, so we must move down until the block below isn't air
 		else {
-			while (curBlock.getRelative(BlockFace.DOWN).getType() == Material.AIR) {
+			while (curBlock.getRelative(BlockFace.DOWN).getType() == Material.AIR || curBlock.getRelative(BlockFace.DOWN).getType() == Material.WATER) {
 				curBlock = world.getBlockAt(curBlock.getRelative(BlockFace.DOWN).getLocation());
 			}
 		}
@@ -291,6 +334,20 @@ public class BonemealRadius extends JavaPlugin implements Listener {
 	private void placeDoubleGrass(Block b) {
 		b.getRelative(BlockFace.UP).setType(Material.TALL_GRASS, false);
 		b.setType(Material.TALL_GRASS, false);
+
+		Bisected dataUpper = (Bisected) b.getRelative(BlockFace.UP).getBlockData();
+		dataUpper.setHalf(Bisected.Half.TOP);
+
+		Bisected dataLower = (Bisected) b.getBlockData();
+		dataLower.setHalf(Bisected.Half.BOTTOM);
+
+		b.getRelative(BlockFace.UP).setBlockData(dataUpper);
+		b.setBlockData(dataLower);
+	}
+
+	private void placeDoubleSeaGrass(Block b) {
+		b.getRelative(BlockFace.UP).setType(Material.TALL_SEAGRASS, false);
+		b.setType(Material.TALL_SEAGRASS, false);
 
 		Bisected dataUpper = (Bisected) b.getRelative(BlockFace.UP).getBlockData();
 		dataUpper.setHalf(Bisected.Half.TOP);
